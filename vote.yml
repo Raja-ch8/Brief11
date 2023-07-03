@@ -16,9 +16,16 @@ spec:
     spec:
       containers:
       - name: voteapp
-        image: whujin11e/public:azure_voting_app
+        image: raja8/vote-app:1.0.111
         ports:
         - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "150m"
+            memory: "100Mi"
         env:
         - name: REDIS
           value: "clustredis"
