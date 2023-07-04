@@ -1,16 +1,16 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress
+  name: ingress-vote
   annotations:
     kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.middlewares: default-basicauth@kubernetescrd
 spec:
-  tls:
-    - secretName: test-tls
   rules:
-  - http:
+  - host: vote.simplon-raja.space
+    http:
       paths:
-      - pathType: Prefix
+      - pathType: ImplementationSpecific
         path: /
         backend:
           service:
