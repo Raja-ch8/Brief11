@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: traefik-sso
+  name: traefik-sso
+spec:
+  progressDeadlineSeconds: 2147483647
+  replicas: 1
+  revisionHistoryLimit: 2147483647
+  selector:
+    matchLabels:
+      app: traefik-sso
+      name: traefik-sso
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: traefik-sso
+        name: traefik-sso
+    spec:
+      containers:
+      - env:
+        - name: PROVIDERS_GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: clientid
+              name: traefik-sso
+        - name: PROVIDERS_GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: clientsecret
+              name: traefik-sso
+        - name: SECRET
+          valueFrom:
+            secretKeyRef:
+              key: secret
+              name: traefik-sso
+        - name: COOKIE_DOMAIN
+          value: simplon-raja.space
+        - name: AUTH_HOST
+          value: voting.simplon-raja.space
+        - name: INSECURE_COOKIE
+          value: "false"
+        - name: WHITELIST
+          value: choukri.raja1@gmail.com
+        - name: LOG_LEVEL
+          value: debug
+        image: thomseddon/traefik-forward-auth:2
+        imagePullPolicy: Always
+        name: traefik-sso
+        ports:
+        - containerPort: 4181
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status: {}
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: traefik-sso
+spec:
+  selector:
+    app: traefik-sso
+  ports:
+  - protocol: TCP
+    port: 4181
+    targetPort: 4181
