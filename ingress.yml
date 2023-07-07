@@ -1,13 +1,21 @@
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress-vote
+  name: ingress
+  namespace: default
   annotations:
     kubernetes.io/ingress.class: traefik
-    traefik.ingress.kubernetes.io/router.middlewares: default-basicauth@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: default-basicauth@kubernetescrd,default-ipwhitelist@kubernetescrd,default-redirect@kubernetescrd,default-traefik-sso@kubernetescrd
+    traefik.ingress.kubernetes.io/router.tls.options: default-client-cert@kubernetescrd
+    cert-manager.io/issuer: cert-manager
 spec:
+  tls: 
+    - hosts: 
+        - voting.simplon-raja.space
+      secretName: tls-cert-ingress-http
   rules:
-  - host: vote.simplon-raja.space
+  - host: voting.simplon-raja.space
     http:
       paths:
       - pathType: ImplementationSpecific
