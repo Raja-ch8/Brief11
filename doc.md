@@ -250,7 +250,7 @@ data:
 
 ```consol
 htpasswd -nb user password | openssl base64
-htpasswd -nb user password | openssl base64
+htpasswd -nb raja ******** | openssl base64
 ```
 
 - **Deployment redis, vote et traefik**
@@ -296,9 +296,6 @@ Test avec le partage de connection
 
 1.  *Installer Cert-manager*
 
-```consol
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml
-```
 Cert-manager est un contrôleur Kubernetes open-source qui automatise la gestion des certificats TLS (Transport Layer Security) pour les applications s'exécutant dans un cluster Kubernetes. Il facilite la demande, l'émission et le renouvellement des certificats SSL/TLS en intégrant des fournisseurs de certificats tels que Let's Encrypt.
 
 ### *tls.yml*
@@ -325,9 +322,124 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ingress-vote
+  namespace: default
   annotations:
     kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.middlewares: default-basicauth@kubernetescrd,default-ipwhitelist@kubernetescrd,default-redirect@kubernetescrd
+    cert-manager.io/issuer: cert-manager
+spec:
+  tls: 
+    - hosts: 
+        - voting.simplon-raja.space
+      secretName: tls-cert-ingress-http
+  rules:
+  - host: voting.simplon-raja.space
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /
+        backend:
+          service:
+            name: loadvoteapp
+            port:
+              number: 80
+
+```
+### *cert-manager.yml*
+
+```consol
+
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+ name: cert-manager
+ namespace: default
+spec:
+ acme:
+   server: https://acme-v02.api.letsencrypt.org/directory
+   privateKeySecretRef:
+     name: cert-manager-account-key
+   solvers:
+     - http01:
+         ingress:
+           class: traefik
+```
+
+```consol
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml
+```
+
+##  **4/ Mettre en place une authentification avec certificats TLS client. Il faudra mettre en place une PKI et uniquement valider les certificats qui ont été générés via le Certificate Authority. Verifier que seuls les clients presentants un certificat valide sont autorises**
+
+ 
+ 1. **Générer une autorité de certification (CA):**
+ 
+ ```conosl
+ openssl genrsa -des3 -out 'ca.key' 4096
+ openssl req -x509 -new -nodes -key 'ca.key' -sha384 -days 1825 -out 'ca.crt'
+```
+- Creation du secret
+
+### *secret.yml*
+
+```consol
+apiVersion: v1
+kind: Secret
+metadata:
+  name: client-auth-ca-cert
+type: Opaque
+data:  
+  ca-crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZRVENDQXltZ0F3SUJBZ0lVRUQvczVEUGVnM0FONnlGUHdwcm03dFU2WG9Vd0RRWUpLb1pJaHZjTkFRRU0KQlFBd01ERUxNQWtHQTFVRUJoTUNSbEl4SVRBZkJnTlZCQW9NR0VsdWRHVnlibVYwSUZkcFpHZHBkSE1nVUhSNQpJRXgwWkRBZUZ3MHlNekEzTURVeE1EQTVNamhhRncweU9EQTNNRE14TURBNU1qaGFNREF4Q3pBSkJnTlZCQVlUCkFrWlNNU0V3SHdZRFZRUUtEQmhKYm5SbGNtNWxkQ0JYYVdSbmFYUnpJRkIwZVNCTWRHUXdnZ0lpTUEwR0NTcUcKU0liM0RRRUJBUVVBQTRJQ0R3QXdnZ0lLQW9JQ0FRQzJ3a0lKK2RlSHNtSGsvdTdSZGVqeXQwVHNBME01ZmRrSApvdFNRMXkyZzByWHFrMVEvRTFCZWdOMllIazBpZlZqZURhbCtOTnJiZHN4UFdTNW1ib29iS0NVdkRUcDBBRm1WCk1zWm9ETlNSemlkc3hqd0d2eGVBUEhZUEtBVWhYNDFUTnlOR2xRcTI4bFZqdEprUHNleUgzeFN3Z3lSd1RSSkoKWkQ3OUVZSm1LS2QyUDhsYUs2U25YcEFMZHFlVFhwN2hkMHVDc0YwTDJXckk5eTRab3YzZ3V4R1VhYndRMGpVRgp2RkdNOVg3VW5Pd0k5aU14bnkyUS8yYXIvS0xFSUVtYi9ENFp2UzNYaEhsLzFzcGxpZnFQWkkrOUJudk1LaFRECi8wRnRSSk5xbjcrR1R1OWhWS2lGNGhGY1J3SGFxc3VEWURGUkVPakxRVVpkT2FkUm5peXI5THVwclRJbzA4WFUKTXB3Znd3MmlrYnhPbjRPUFNacFBWZU1CMEhtMGZRcisvY2tRakNMRlB0Si9zbDluNmJHaTBLS1U0Zk9EaDdDNgovaXZmcHdWc09vQmJwR1BuaTk2bG0yRHBJVXNMOXFidjNCZklubng1WXFlQU1XcGMwZmNXSU1zNmFic1VuMWZFCndzbXN4MVc1SWMrK01VcFgzbmdZR09iamlZaWhvMm9XZmdjYjQ3Q3Z4WkNhckJIR3p4U3U0endDMGYxM0tITysKRkRvZGZOV3MvbVRNaXJCZ2QzQWRjWkNDTDF1VFhOalNSRTVrdmVTU2UxaUVNMkNSTGhMOUVUczNjTW5nU3NJOAppNDIrbmlleTNXdVZ3a2JBL1NMVlVPRmdvY1hwQmlsWHRWU3Ywc2pVaVEzTnIzSmk0aFNRZzEwR2dOeTBQYjVHCmQ4VDdiUUdhb1FJREFRQUJvMU13VVRBZEJnTlZIUTRFRmdRVUlyZlZVVis1dldTMGpTVUJ6cElZSUdZYXBpMHcKSHdZRFZSMGpCQmd3Rm9BVUlyZlZVVis1dldTMGpTVUJ6cElZSUdZYXBpMHdEd1lEVlIwVEFRSC9CQVV3QXdFQgovekFOQmdrcWhraUc5dzBCQVF3RkFBT0NBZ0VBanVMUDFiMTdHbjFEeHpmUG5wVlFsRmxpcThmWkgxVFc4aG5RClgrWW1JV0Zkb3RCYnM5R0pjNnJITkF3N0ljdWpnRGxUaXQ0aFJ0VldBRCs2V0xjN2tqSzNmY2d4SVg3QkhjcVEKU2NDWU01VVV1VjhnMlRhZ2gxalhCQ2FFSkNnR2hoR3RaWFpHOTkvY0NFcWcrUWp6ZnRaUjRyZ245TDA5bWxudgpBcDhSeEdtTVRxMXJrL3F2a0YyaGZjYnZEczBOMmhEeHhRZzc1VU9OZW1ySEo0eDRHV1RnMi9uYWczMGtxRjZKCjk1VGd4bGY5ZWxmTjNzSFMzcmFxUi9sNXhrVGxCNVlwQTg4Z3I3K1pVMGFYbE4xTVQ1Z3RMM2dFckZuV0J2TEIKM2NGT203RlNNSVVjUzZCSldQKzd0QklPbW52ai8vZk10NGRnRUtZYlpFc3MvVStHbENqYk9maUJMRElQM0xKRgovNjNhVFlUSmVxcFBPd0dYQWVDbEFPdHN0STN6azVQcGhhaURZSThCWjFEdXlaSDhXZmMrSGtRdWN1TjFTTFBECjRnL0h2cS9TUFFmWngwa1hGMlkwL3c4azA3ZlNuNERGZDFiOWFxcC9SYjNUeUJPd1VTcVlnZzBVbHpUN3UvL0EKM1UrMWtQR3FYWmlSbUdQenJoNHQvOFBiN3lGMllpWWJMR1dOTXUxVng1Z29PUGNnWVRtMW9ZRTQ5aXFFOXJrdwp0Y2EyN0JhcHRjMmxMazVHUE12OUZ3NGNKVW9aMHdzSmlGR3lsS3ZPNmhRUTZySFJvejNFZjVMUUF3UmxJbDJ2Cm5IV0JEckwrajlaVVlLU3dsOW5iTmJPdVN1OTRoS0x3cnFhZHpnY3AwVTRLaExuVHhOQmJPUVdRVTNIaThlT1kKOTB2dVBGRT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+
+```
+```consol 
+base64 -i ca.crt -> Pur genere le secret chiffre en base 64
+```
+```consol 
+echo -n '' -> permet de filtre le caractere speciaux.
+```
+```
+ 
+2. **Ajouter le certificat CA à Traefik**
+
+### *tlsoption.yml*
+
+```consol
+
+apiVersion: traefik.containo.us/v1alpha1
+kind: TLSOption
+metadata:
+  name: client-cert 
+  namespace: default 
+spec:
+  minVersion: VersionTLS12
+  maxVersion: VersionTLS13
+  clientAuth:
+    secretNames:
+      - client-auth-ca-cert
+    clientAuthType: RequireAndVerifyClientCert
+  curvePreferences:
+    - CurveP521
+    - CurveP384
+  cipherSuites:
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+    - TLS_AES_256_GCM_SHA384
+    - TLS_CHACHA20_POLY1305_SHA256
+  sniStrict: true
+
+```
+### *ingress.yml*
+
+```consol
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-vote
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.middlewares: default-basicauth@kubernetescrd,default-ipwhitelist@kubernetescrd,default-redirect@kubernetes
+    traefik.ingress.kubernetes.io/router.tls.options: default-client-cert@kubernetescrd
 spec:
   rules:
   - host: vote.simplon-raja.space
@@ -340,5 +452,27 @@ spec:
             name: loadvoteapp
             port:
               number: 80
-
 ```
+
+curl -vk https://example.com 
+curl -vk  https://vote.simplon-raja.space
+
+![](https://hackmd.io/_uploads/Bkl_FbVKh.png)
+
+![](https://hackmd.io/_uploads/H1KFtWEF2.png)
+
+4. Générer un certificat client
+
+```consol
+export DOMAIN=voting.simplon-raja.space
+export ORGANIZATION=raja-cert
+export COUNTRY=fr
+
+openssl genrsa -des3 -out "voting.simplon-raja.space.key" 4096
+openssl req -new -key "voting.simplon-raja.space.key" -out "voting.simplon-raja.space.csr" -subj "/CN=voting.simplon-raja.space.key/O=raja-cert/C=fr"
+
+openssl x509 -sha384 -req -CA 'ca.crt' -CAkey 'ca.key' -CAcreateserial -days 365 -in "voting.simplon-raja.space.csr" -out "voting.simplon-raja.space.crt"
+openssl pkcs12 -export -out ".pfx" -inkey "voting.simplon-raja.space.key" -in "voting.simplon-raja.space.crt"
+```
+
+## **5/ Retirer l’authentification simple par mot de passe local sur Traefik. Mettre en place une authentification OAuth avec Google ID afin d’autoriser les utilisateurs à l’aide de leur compte Google.**
